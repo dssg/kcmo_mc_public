@@ -1,0 +1,6 @@
+*.pyc
+*.log
+src/utils/__pycache__/*.pyc
+src/pipeline/pipeline.txt
+.envrc
+.env

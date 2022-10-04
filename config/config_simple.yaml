@@ -1,0 +1,111 @@
+# YAML file 
+
+pipeline_schema_name: "pipeline"
+modeling_schema_name: "modeling"
+role_name: "kcmo-mc-role"
+random_seed: 472707
+
+time_splitter_config: 
+  newest_available_date: "2022-06-15"
+  oldest_available_date: "2012-06-15"
+  label_window: 12 # number of months 
+  label_window_unit: "months"
+  training_window: 3 # years
+  model_update_freq: 3 # month
+  max_splits: 2
+
+
+cohort_config:
+  cohort_table_name: "cohort"
+  cohort_sql_path: "src/pipeline/cohort/test_cohort.sql"
+
+label_config:
+  label_table_name: "labels"
+  label_sql_path: "src/pipeline/labels/label_creator.sql"
+
+feature_config:
+  feature_groups: ["violation_events_history","probation_events_history", "charge_features_table", "demographics", "days_since_last"]
+  probation_events_history:
+    feature_values: 
+      past_case_num_prob: "t.case_num"
+      past_disp_num: "t.disp_date"
+    intervals: ["1year", "2years", "3years", "4years", "5years", "10years", "999years"]
+    funcs: ["COUNT"]
+    param: "DISTINCT"
+    from_arg: "clean.dispositions" 
+    event_date: t.disp_date
+    feature_sql_path: "src/pipeline/features/court_history_features.sql"
+  violation_events_history:
+    feature_values: 
+      past_case_num_viol: "t.case_num"
+    intervals: ["1year", "2years", "3years", "4years", "5years", "10years", "999years"]
+    funcs: ["COUNT"]
+    param: "DISTINCT"
+    from_arg: "clean.violations" 
+    event_date: t.viol_dttm
+    feature_sql_path: "src/pipeline/features/court_history_features.sql"
+  demographics:
+    feature_sql_path: "src/pipeline/features/demographic_features.sql"
+  charge_features_table:
+    dummy_var: []
+  days_since_last:
+    feature_sql_path: "src/pipeline/features/days_since_last_features.sql"
+    
+modelling_config:
+  pkl_dir: "/mnt/data/projects/kcmo-mc/outputs/model_pickles"
+  precision_recall_dir: "/mnt/data/projects/kcmo-mc/outputs/precision_recall"
+  matrices_dir: "/mnt/data/projects/kcmo-mc/outputs/matrices"
+
+  model_metadata_table_name: 'model_metadata'
+  model_set_metadata_table_name: 'model_set_metadata'
+  predictions_table_name: 'model_predictions'
+  model_metrics_table_name: 'model_metrics'
+  feature_importances_table_name: 'feature_importances'
+  pipeline_run_table_name: 'pipeline_run'
+
+
+  #define names of models to run, if adding a new model specify model params below
+  model_types: ["num_cases_baseline","decision_tree""]
+  model_params:
+
+    num_cases_baseline:
+      model_type_name: "src.pipeline.model.modeling.Baseline"
+      hyperparameters:
+        feature_list: [['past_case_num_viol_999years_count']]
+        ascending_list: [[False]]
+
+    decision_tree: 
+      model_type_name: "sklearn.tree.DecisionTreeClassifier"
+      hyperparameters:
+        criterion: ["gini", "entropy"]
+        max_depth: [2, 5]
+        min_samples_leaf: [0.01,0.05,0.10]
+
+    logistic_regression:
+      model_type_name: "triage.component.catwalk.estimators.classifiers.ScaledLogisticRegression"
+      hyperparameters: 
+        C: [0.00001, 0.0001, 0.001, 0.01, 0.1, 1, 10]
+        penalty: ['l2']
+        max_iter: [2000]
+
+    random_forest: 
+      model_type_name: "sklearn.ensemble.RandomForestClassifier"
+      hyperparameters:
+        n_estimators: [500, 1000, 1500]
+        criterion: ["gini"]
+        max_depth: [25, 50, 100, null]
+        max_features: ["sqrt"]
+        n_jobs: [-2]
+
+    tabnet:
+      model_type_name: "pytorch_tabnet.tab_model.TabNetRegressor"
+      hyperparameters:
+        optimizer_params: [{'lr':2e-1}, {'lr':2e-2}, {'lr':2e-3}, {'lr':2e-4}]
+        n_d: [4, 8]
+    
+    boosted_forest:
+      model_type_name: "sklearn.ensemble.GradientBoostingClassifier"
+      hyperparameters:
+        n_estimators: [100, 200, 300]
+        learning_rate: [0.1,0.01, 0.001, 0.0001]
+
